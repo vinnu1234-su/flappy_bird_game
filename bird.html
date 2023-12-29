@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #87CEEB;
+        }
+
+        canvas {
+            border: 1px solid #000;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="flappyBirdCanvas" width="480" height="320"></canvas>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const canvas = document.getElementById("flappyBirdCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Bird
+        const bird = {
+            x: 50,
+            y: canvas.height / 2 - 15,
+            width: 30,
+            height: 30,
+            color: "yellow",
+            velocity: 0,
+            gravity: 0.5,
+            jump: -8,
+        };
+
+        // Pipes
+        const pipes = [];
+        const pipeWidth = 50;
+        const pipeHeight = 200;
+        const pipeGap = 150;
+
+        // Game state
+        let score = 0;
+
+        function drawBird() {
+            ctx.fillStyle = bird.color;
+            ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+        }
+
+        function drawPipes() {
+            ctx.fillStyle = "green";
+            for (const pipe of pipes) {
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                ctx.fillRect(pipe.x, pipe.bottomStart, pipeWidth, pipeHeight);
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = "#000";
+            ctx.font = "20px Arial";
+            ctx.fillText("Score: " + score, 10, 20);
+        }
+
+        function update() {
+            bird.velocity += bird.gravity;
+            bird.y += bird.velocity;
+
+            // Check for collisions with the top and bottom of the canvas
+            if (bird.y < 0) {
+                bird.y = 0;
+                bird.velocity = 0;
+            }
+            if (bird.y + bird.height > canvas.height) {
+                bird.y = canvas.height - bird.height;
+                bird.velocity = 0;
+            }
+
+            // Move pipes
+            for (const pipe of pipes) {
+                pipe.x -= 2;
+
+                // Check for collisions with pipes
+                if (
+                    bird.x < pipe.x + pipeWidth &&
+                    bird.x + bird.width > pipe.x &&
+                    (bird.y < pipe.topHeight || bird.y + bird.height > pipe.bottomStart)
+                ) {
+                    resetGame();
+                }
+
+                // Check for passing pipes
+                if (pipe.x + pipeWidth < bird.x && !pipe.passed) {
+                    pipe.passed = true;
+                    score++;
+                }
+            }
+
+            // Remove off-screen pipes
+            pipes.filter(pipe => pipe.x + pipeWidth > 0);
+
+            // Generate new pipes
+            if (Math.random() < 0.01) {
+                const topHeight = Math.random() * (canvas.height - pipeGap);
+                const bottomStart = topHeight + pipeGap;
+                pipes.push({ x: canvas.width, topHeight, bottomStart, passed: false });
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawBird();
+            drawPipes();
+            drawScore();
+        }
+
+        function resetGame() {
+            bird.y = canvas.height / 2 - 15;
+            bird.velocity = 0;
+            pipes.length = 0;
+            score = 0;
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener("keydown", function (event) {
+            if (event.code === "Space") {
+                bird.velocity = bird.jump;
+            }
+        });
+
+        resetGame();
+        gameLoop();
+    });
+</script>
+
+</body>
+</html>
