@@ -4,184 +4,269 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Flappy Bird Clone</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      background-color: #87CEEB;
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    @keyframes rise {
+      0% {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
     }
-
-    canvas {
-      border: 2px solid #000;
-      background-color: #87CEEB;
-      touch-action: manipulation;
+    .rise-animation {
+      animation: rise 1.5s ease-out forwards;
     }
   </style>
 </head>
-<body>
-  <canvas id="flappyBirdCanvas"></canvas>
+<body class="min-h-screen w-full overflow-hidden transition-all duration-1000 ease-in-out bg-black">
+
+  <!-- Splash Screen -->
+  <div id="logoScreen" class="absolute inset-0 bg-black flex flex-col items-center justify-center z-50">
+    <img src="https://static0.gamerantimages.com/wordpress/wp-content/uploads/2021/01/epic-games-store-1.jpg"
+         alt="Logo"
+         class="w-28 h-28 md:w-36 md:h-36 rounded-xl mb-6 rise-animation" />
+    <h1 class="text-white text-4xl md:text-5xl font-extrabold rise-animation">Flappy Bird</h1>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="startScreen" class="hidden absolute inset-0 flex items-center justify-center z-40">
+    <button id="startBtn"
+            class="bg-gradient-to-r from-yellow-400 via-red-400 to-pink-500 text-white text-xl md:text-2xl font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition">
+      Start Game
+    </button>
+  </div>
+
+  <!-- Game UI -->
+  <div id="gameWrapper"
+       class="hidden relative w-full flex flex-col items-center justify-center bg-gradient-to-br from-sky-400 via-purple-300 to-emerald-300 min-h-screen">
+
+    <!-- Pause Button -->
+    <button id="pauseBtn"
+            class="absolute top-4 right-4 z-20 bg-white px-4 py-1 rounded shadow font-bold hover:bg-gray-100">
+      Pause
+    </button>
+
+    <!-- Game Canvas -->
+    <canvas id="flappyBirdCanvas"
+            class="border-4 border-black bg-sky-400 w-full max-w-xl aspect-[4/3] rounded-xl shadow-xl"></canvas>
+  </div>
+
+  <!-- Game Over Modal -->
+  <div id="gameOverModal"
+       class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 shadow-lg text-center">
+      <h2 class="text-2xl font-bold mb-2">Game Over</h2>
+      <p id="finalScore" class="text-lg mb-2">Score: 0</p>
+      <p id="highScore" class="text-sm text-gray-600 mb-4">High Score: 0</p>
+      <button id="restartBtn"
+              class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+        Restart
+      </button>
+    </div>
+  </div>
 
   <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const canvas = document.getElementById("flappyBirdCanvas");
-      const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById("flappyBirdCanvas");
+    const ctx = canvas.getContext("2d");
 
-      // Base game size
-      const baseWidth = 480;
-      const baseHeight = 320;
+    // Elements
+    const logoScreen = document.getElementById("logoScreen");
+    const startScreen = document.getElementById("startScreen");
+    const startBtn = document.getElementById("startBtn");
+    const gameWrapper = document.getElementById("gameWrapper");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const gameOverModal = document.getElementById("gameOverModal");
+    const finalScore = document.getElementById("finalScore");
+    const highScore = document.getElementById("highScore");
+    const restartBtn = document.getElementById("restartBtn");
 
-      // Set canvas size proportionally based on screen
-      function resizeCanvas() {
-        const ratio = baseWidth / baseHeight;
-        let width = window.innerWidth;
-        let height = window.innerHeight;
+    // Assets
+    const birdImg = new Image();
+    birdImg.src = "https://i.ibb.co/QmZ8dY9/bird.png";
 
-        if (width / height > ratio) {
-          width = height * ratio;
-        } else {
-          height = width / ratio;
-        }
+    const flapSound = new Audio("https://freesound.org/data/previews/466/466748_960689-lq.mp3");
+    const pointSound = new Audio("https://freesound.org/data/previews/458/458627_8386278-lq.mp3");
+    const hitSound = new Audio("https://freesound.org/data/previews/466/466749_960689-lq.mp3");
+    const bgMusic = new Audio("https://freesound.org/data/previews/566/566512_7037-lq.mp3");
+    bgMusic.loop = true;
 
-        canvas.style.width = width + "px";
-        canvas.style.height = height + "px";
-        canvas.width = baseWidth;
-        canvas.height = baseHeight;
+    // Canvas size
+    canvas.width = 640;
+    canvas.height = 480;
+
+    const bird = {
+      x: 50,
+      y: canvas.height / 2 - 15,
+      width: 40,
+      height: 30,
+      velocity: 0,
+      gravity: 0.35,
+      jump: -6,
+    };
+
+    const pipes = [];
+    const pipeWidth = 60;
+    const pipeGap = 160;
+    let score = 0;
+    let paused = false;
+    let gameStarted = false;
+
+    function drawBird() {
+      ctx.drawImage(birdImg, bird.x, bird.y, bird.width, bird.height);
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = "green";
+      for (const pipe of pipes) {
+        ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+        ctx.fillRect(pipe.x, pipe.bottomStart, pipeWidth, canvas.height - pipe.bottomStart);
       }
+    }
 
-      window.addEventListener("resize", resizeCanvas);
-      resizeCanvas();
+    function drawScore() {
+      ctx.fillStyle = "#000";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 10, 25);
+    }
 
-      // Bird
-      const bird = {
-        x: 50,
-        y: baseHeight / 2 - 15,
-        width: 30,
-        height: 30,
-        color: "yellow",
-        velocity: 0,
-        gravity: 0.5,
-        jump: -8,
-      };
+    function update() {
+      if (paused || !gameStarted) return;
 
-      // Pipes
-      const pipes = [];
-      const pipeWidth = 50;
-      const pipeGap = 150;
+      bird.velocity += bird.gravity;
+      bird.y += bird.velocity;
 
-      let score = 0;
-
-      function drawBird() {
-        ctx.fillStyle = bird.color;
-        ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
-      }
-
-      function drawPipes() {
-        ctx.fillStyle = "green";
-        for (const pipe of pipes) {
-          ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
-          ctx.fillRect(pipe.x, pipe.bottomStart, pipeWidth, baseHeight - pipe.bottomStart);
-        }
-      }
-
-      function drawScore() {
-        ctx.fillStyle = "#000";
-        ctx.font = "20px Arial";
-        ctx.fillText("Score: " + score, 10, 25);
-      }
-
-      function update() {
-        bird.velocity += bird.gravity;
-        bird.y += bird.velocity;
-
-        // Clamp bird to top and bottom
-        if (bird.y < 0) {
-          bird.y = 0;
-          bird.velocity = 0;
-        }
-
-        if (bird.y + bird.height > baseHeight) {
-          bird.y = baseHeight - bird.height;
-          bird.velocity = 0;
-        }
-
-        for (const pipe of pipes) {
-          pipe.x -= 2;
-
-          // Collision detection
-          if (
-            bird.x < pipe.x + pipeWidth &&
-            bird.x + bird.width > pipe.x &&
-            (bird.y < pipe.topHeight || bird.y + bird.height > pipe.bottomStart)
-          ) {
-            resetGame();
-          }
-
-          // Passed pipe
-          if (pipe.x + pipeWidth < bird.x && !pipe.passed) {
-            pipe.passed = true;
-            score++;
-          }
-        }
-
-        // Remove off-screen pipes
-        while (pipes.length && pipes[0].x + pipeWidth < 0) {
-          pipes.shift();
-        }
-
-        // Add new pipe
-        if (Math.random() < 0.02) {
-          const topHeight = Math.random() * (baseHeight - pipeGap - 50);
-          const bottomStart = topHeight + pipeGap;
-          pipes.push({ x: baseWidth, topHeight, bottomStart, passed: false });
-        }
-      }
-
-      function draw() {
-        ctx.clearRect(0, 0, baseWidth, baseHeight);
-        drawBird();
-        drawPipes();
-        drawScore();
-      }
-
-      function resetGame() {
-        bird.y = baseHeight / 2 - 15;
+      if (bird.y + bird.height > canvas.height) {
+        bird.y = canvas.height - bird.height;
         bird.velocity = 0;
-        pipes.length = 0;
-        score = 0;
+      }
+      if (bird.y < 0) {
+        bird.y = 0;
+        bird.velocity = 0;
       }
 
-      function gameLoop() {
+      for (const pipe of pipes) {
+        pipe.x -= 2;
+
+        // Collision detection
+        if (
+          bird.x < pipe.x + pipeWidth &&
+          bird.x + bird.width > pipe.x &&
+          (bird.y < pipe.topHeight || bird.y + bird.height > pipe.bottomStart)
+        ) {
+          hitSound.play();
+          return endGame();
+        }
+
+        if (pipe.x + pipeWidth < bird.x && !pipe.passed) {
+          pipe.passed = true;
+          score++;
+          pointSound.play();
+        }
+      }
+
+      while (pipes.length && pipes[0].x + pipeWidth < 0) {
+        pipes.shift();
+      }
+
+      if (Math.random() < 0.02) {
+        const topHeight = Math.random() * (canvas.height - pipeGap - 60);
+        pipes.push({
+          x: canvas.width,
+          topHeight,
+          bottomStart: topHeight + pipeGap,
+          passed: false,
+        });
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBird();
+      drawPipes();
+      drawScore();
+    }
+
+    function gameLoop() {
+      if (!gameStarted) return;
+      if (!paused) {
         update();
         draw();
-        requestAnimationFrame(gameLoop);
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    function flap() {
+      bird.velocity = bird.jump;
+      flapSound.play();
+    }
+
+    function resetGame() {
+      bird.y = canvas.height / 2 - 15;
+      bird.velocity = 0;
+      pipes.length = 0;
+      score = 0;
+      gameOverModal.classList.add("hidden");
+    }
+
+    function endGame() {
+      gameStarted = false;
+      finalScore.textContent = "Score: " + score;
+
+      const storedHigh = localStorage.getItem("highScore") || 0;
+      if (score > storedHigh) {
+        localStorage.setItem("highScore", score);
       }
 
-      function flap() {
-        bird.velocity = bird.jump;
-      }
+      highScore.textContent = "High Score: " + localStorage.getItem("highScore");
+      gameOverModal.classList.remove("hidden");
+      bgMusic.pause();
+    }
 
-      // Keyboard input
-      document.addEventListener("keydown", function (e) {
-        if (e.code === "Space" || e.code === "ArrowUp") {
-          flap();
-        }
-      });
-
-      // Touch input for mobile
-      canvas.addEventListener("touchstart", function (e) {
-        e.preventDefault();
+    document.addEventListener("keydown", (e) => {
+      if ((e.code === "Space" || e.code === "ArrowUp") && !paused) {
         flap();
-      }, { passive: false });
+      }
+    });
 
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (!paused) flap();
+    }, { passive: false });
+
+    pauseBtn.addEventListener("click", () => {
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Resume" : "Pause";
+      if (paused) {
+        bgMusic.pause();
+      } else {
+        bgMusic.play();
+      }
+    });
+
+    restartBtn.addEventListener("click", () => {
       resetGame();
+      gameStarted = true;
+      bgMusic.play();
       gameLoop();
     });
+
+    startBtn.addEventListener("click", () => {
+      startScreen.classList.add("hidden");
+      gameWrapper.classList.remove("hidden");
+      gameStarted = true;
+      resetGame();
+      bgMusic.play();
+      gameLoop();
+    });
+
+    setTimeout(() => {
+      logoScreen.classList.add("hidden");
+      document.body.classList.remove("bg-black");
+      startScreen.classList.remove("hidden");
+    }, 2000);
   </script>
 </body>
 </html>
